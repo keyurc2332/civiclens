@@ -1,0 +1,32 @@
+# --- Core ---
+pandas>=2.2
+numpy>=1.26
+requests>=2.31
+python-dotenv>=1.0
+pyyaml>=6.0
+pydantic>=2.6
+
+# --- Warehouse ---
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+
+# --- Orchestration ---
+dagster>=1.7
+dagster-webserver>=1.7
+
+# --- Data quality ---
+pandera>=0.19
+
+# --- Modeling ---
+scikit-learn>=1.4
+xgboost>=2.0
+shap>=0.45
+
+# --- Dashboard ---
+streamlit>=1.35
+plotly>=5.22
+
+# --- Dev / test ---
+pytest>=8.0
+black>=24.0
+ruff>=0.4

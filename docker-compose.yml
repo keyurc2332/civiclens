@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: civiclens_pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: civiclens
+      POSTGRES_PASSWORD: civiclens_dev
+      POSTGRES_DB: civiclens
+    ports:
+      - "5433:5432"
+    volumes:
+      - civiclens_pgdata:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d   # auto-runs 01/02/03 .sql on first boot
+
+volumes:
+  civiclens_pgdata:

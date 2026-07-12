@@ -1,0 +1,54 @@
+# CivicLens central config
+# Single source of truth for scope -- ingestion, features, and
+# dashboard filters should all read from here rather than hardcoding.
+
+cities:
+  - name: Mumbai
+    state: Maharashtra
+    lat: 19.0760
+    lon: 72.8777
+  - name: Delhi
+    state: Delhi
+    lat: 28.7041
+    lon: 77.1025
+  - name: Bengaluru
+    state: Karnataka
+    lat: 12.9716
+    lon: 77.5946
+  - name: Pune
+    state: Maharashtra
+    lat: 18.5204
+    lon: 73.8567
+  - name: Hyderabad
+    state: Telangana
+    lat: 17.3850
+    lon: 78.4867
+  - name: Chennai
+    state: Tamil Nadu
+    lat: 13.0827
+    lon: 80.2707
+
+sources:
+  data_gov_in:
+    base_url: "https://api.data.gov.in/resource"
+    # resource_id for MoRTH accident stats -- fill in after locating
+    # the exact dataset on data.gov.in (search "road accidents state")
+    accident_resource_id: "74624e5e-c174-4bfa-a25d-36ea3f580727"
+  cpcb:
+    base_url: "https://api.data.gov.in/resource"
+    aqi_resource_id: "REPLACE_ME"
+  imd:
+    # IMD does not have a single clean public REST API; document
+    # whichever access path you end up using (IMD API / data.gov.in
+    # weather resource / Open-Meteo as a stand-in) here once decided.
+    base_url: "REPLACE_ME"
+
+warehouse:
+  schemas:
+    raw: raw
+    clean: clean
+    analytics: analytics
+
+modeling:
+  target: risk_level          # Low / Medium / High
+  grain: city_month
