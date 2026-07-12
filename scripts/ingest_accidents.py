@@ -99,39 +99,52 @@ def compute_quality_score(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def load_clean(engine, df: pd.DataFrame) -> None:
+    # NOTE: clean.accidents has UNIQUE(state, year, month), but month is
+    # always NULL for this annual dataset -- and NULL is never considered
+    # equal to NULL for uniqueness purposes in Postgres, so ON CONFLICT
+    # upserts against this constraint silently never match, causing
+    # duplicate rows on every re-run. Fixed by clearing the table and
+    # doing a fresh bulk insert instead -- safe here because this script
+    # always loads the complete state set on every run.
     with engine.begin() as conn:
-        for _, row in df.iterrows():
-            conn.execute(
-                text(
-                    """
-                    INSERT INTO clean.accidents
-                        (state, year, month, total_accidents, fatalities, injuries,
-                         quality_score, quality_flags, loaded_at)
-                    VALUES
-                        (:state, :year, NULL, :total_accidents, NULL, NULL,
-                         :quality_score, :quality_flags, now())
-                    ON CONFLICT (state, year, month) DO UPDATE SET
-                        total_accidents = EXCLUDED.total_accidents,
-                        quality_score = EXCLUDED.quality_score,
-                        quality_flags = EXCLUDED.quality_flags,
-                        loaded_at = now()
-                    """
-                ),
-                {
-                    "state": row["state"],
-                    "year": int(row["year"]),
-                    "total_accidents": None if pd.isna(row["total_accidents"]) else int(row["total_accidents"]),
-                    "quality_score": row["quality_score"],
-                    "quality_flags": row["quality_flags"],
-                },
-            )
-    print(f"Upserted {len(df)} rows into clean.accidents")
+        conn.execute(text("TRUNCATE clean.accidents"))
+
+    records = []
+    for _, row in df.iterrows():
+        records.append({
+            "state": row["state"],
+            "year": int(row["year"]),
+            "total_accidents": None if pd.isna(row["total_accidents"]) else int(row["total_accidents"]),
+            "quality_score": row["quality_score"],
+            "quality_flags": row["quality_flags"],
+        })
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO clean.accidents
+                    (state, year, month, total_accidents, fatalities, injuries,
+                     quality_score, quality_flags, loaded_at)
+                VALUES
+                    (:state, :year, NULL, :total_accidents, NULL, NULL,
+                     :quality_score, :quality_flags, now())
+                """
+            ),
+            records,
+        )
+    print(f"Loaded {len(records)} rows into clean.accidents")
 
 
 def main():
     config = load_config()
     resource_id = config["sources"]["data_gov_in"]["accident_resource_id"]
-    target_states = {c["state"] for c in config["cities"]}
+    # NOTE: we deliberately load ALL states into clean.accidents, not just
+    # our 6 dashboard cities' states. The clean/raw layers hold everything
+    # reasonably available; scoping to the 6 target cities happens later,
+    # at the dashboard/analytics layer. This gives the model a much larger,
+    # more statistically reasonable training set (~36 states) instead of
+    # just 5-6 -- see config.yaml for the dashboard-scope city list.
 
     client = DataGovInClient(resource_id=resource_id)
     batch_id = client.new_batch_id()
@@ -140,27 +153,17 @@ def main():
     records = client.fetch_all()
     print(f"Fetched {len(records)} records")
 
-    # Surface the exact state/UT names data.gov.in uses, so mismatches
-    # (e.g. "Delhi" vs "NCT of Delhi") are visible immediately instead
-    # of silently dropping a target city.
-    all_state_names = {r.get("state_ut") for r in records if r.get("state_ut")}
-    unmatched_targets = target_states - all_state_names
-    if unmatched_targets:
-        print(
-            f"WARNING: these target states from config.yaml were NOT found "
-            f"verbatim in the source data: {unmatched_targets}. "
-            f"Check the exact naming below and update config.yaml if needed."
-        )
-        print("All state/UT names in source data:", sorted(all_state_names))
-
     engine = get_engine()
     land_raw(engine, records, resource_id, batch_id)
 
     long_df = reshape_to_long(records)
-    filtered_df = long_df[long_df["state"].isin(target_states)]
-    print(f"Filtered to {len(filtered_df)} rows for target states: {sorted(target_states)}")
+    # Drop the known "All India" aggregate row if present -- it's a total,
+    # not a state, and would distort state-level modeling if included.
+    long_df = long_df[~long_df["state"].str.contains("All India", case=False, na=False)]
+    print(f"Loading all {long_df['state'].nunique()} states into clean.accidents "
+          f"({len(long_df)} state-year rows)")
 
-    scored_df = compute_quality_score(filtered_df)
+    scored_df = compute_quality_score(long_df)
     load_clean(engine, scored_df)
 
 

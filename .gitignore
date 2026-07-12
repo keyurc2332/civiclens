@@ -9,4 +9,5 @@ venv/
 .ruff_cache/
 notebooks/.ipynb_checkpoints/
 data/
+models/
 *.log
