@@ -45,6 +45,18 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "config.ya
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data_climate")
 STATIONS_INFO_PATH = os.path.join(DATA_DIR, "stations_info.csv")
 
+# Stations with documented sensor faults, excluded per-metric.
+# Discovered via anomaly detection (scripts/detect_anomalies.py):
+# - TN004 (Manali Village, Chennai): reported ~3.3mm/hour average
+#   rainfall for its entire first year (2019) -- ~20x Chennai's real
+#   annual rainfall -- then flatlined to exactly 0.0 thereafter.
+#   Classic faulty rain gauge. Its OTHER metrics (pollutants, temp)
+#   look normal, so only the rainfall column is dropped, not the
+#   whole station.
+FAULTY_STATION_METRICS = {
+    "TN004": ["RF (mm)"],
+}
+
 # Source column -> our schema's column, split by pollutant vs weather.
 POLLUTANT_COLS = {
     "PM2.5 (ug/m3)": "avg_pm25",
@@ -99,6 +111,13 @@ def process_station_file(station_row: pd.Series) -> pd.DataFrame | None:
 
     if df.empty:
         return None
+
+    # Null out metrics from documented faulty sensors (see
+    # FAULTY_STATION_METRICS above) so they don't poison city averages.
+    station_id = station_row["file_name"]
+    for bad_metric in FAULTY_STATION_METRICS.get(station_id, []):
+        if bad_metric in df.columns:
+            df[bad_metric] = pd.NA
 
     df["observed_date"] = pd.to_datetime(df["From Date"], errors="coerce").dt.date
     df = df.dropna(subset=["observed_date"])
