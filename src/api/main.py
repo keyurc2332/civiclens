@@ -43,6 +43,7 @@ def root():
     """Bare-domain visits go straight to the interactive docs."""
     return RedirectResponse(url="/docs")
 
+
 DEFAULT_MODEL_VERSION = "enriched_v2"
 
 
