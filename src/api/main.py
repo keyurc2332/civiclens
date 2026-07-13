@@ -35,6 +35,14 @@ app = FastAPI(
     version="1.0.0",
 )
 
+from fastapi.responses import RedirectResponse
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    """Bare-domain visits go straight to the interactive docs."""
+    return RedirectResponse(url="/docs")
+
 DEFAULT_MODEL_VERSION = "enriched_v2"
 
 

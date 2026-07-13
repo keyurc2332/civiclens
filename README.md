@@ -17,6 +17,15 @@
 </div>
 
 ---
+## 🌐 Live demo
+
+| | |
+|---|---|
+| 📊 **Dashboard** | https://YOUR-APP.streamlit.app |
+| 🔌 **API** | https://civiclens-api-sw2u.onrender.com/docs |
+
+> Free-tier hosting: the API sleeps when idle — the first request may take ~30–60s to wake.
+
 
 ## ⚡ Quick start
 
