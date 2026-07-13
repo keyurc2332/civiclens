@@ -59,6 +59,17 @@ MODEL_FEATURES = BASE_FEATURES + [
     "monsoon_rain_share",
 ]
 
+# Ablation variant: everything EXCEPT accident-history features.
+# Measures what the environmental signal is worth on its own once the
+# near-tautological "last year's accidents predict this year's" lag is
+# removed. Also recovers sample size: yoy deltas still cost each
+# state's first year, but no rows are lost to missing accident lags.
+ENV_ONLY_FEATURES = BASE_FEATURES + [
+    "pm25_yoy_change",
+    "temp_yoy_change",
+    "monsoon_rain_share",
+]
+
 
 def build_city_state_map() -> pd.DataFrame:
     stations = pd.read_csv(STATIONS_INFO_PATH)
