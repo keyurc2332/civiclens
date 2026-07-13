@@ -31,18 +31,24 @@ def load_data():
         accidents = pd.read_sql(text("SELECT * FROM analytics.fact_accident_month"), conn)
         environment = pd.read_sql(text("SELECT * FROM analytics.fact_environment_month"), conn)
         predictions = pd.read_sql(text("SELECT * FROM analytics.fact_risk_prediction"), conn)
+        try:
+            anomalies = pd.read_sql(text("SELECT * FROM analytics.anomalies"), conn)
+        except Exception:
+            anomalies = pd.DataFrame()  # table may not exist until detect_anomalies.py runs
 
     accidents = accidents.merge(cities, on="city_id").merge(dates, on="date_id")
     environment = environment.merge(cities, on="city_id").merge(dates, on="date_id")
     predictions = predictions.merge(cities, on="city_id").merge(dates, on="date_id")
-    return cities, accidents, environment, predictions
+    if not anomalies.empty:
+        anomalies = anomalies.merge(cities, on="city_id").merge(dates, on="date_id")
+    return cities, accidents, environment, predictions, anomalies
 
 
 def main():
     st.title("🚦 CivicLens")
     st.caption("Road accident risk intelligence for major Indian cities — public data, honestly handled.")
 
-    cities, accidents, environment, predictions = load_data()
+    cities, accidents, environment, predictions, anomalies = load_data()
 
     st.sidebar.header("Filters")
     all_city_names = sorted(cities["city_name"].unique())
@@ -55,9 +61,10 @@ def main():
     acc_f = accidents[accidents["city_name"].isin(selected_cities) & accidents["month"].isna()]
     env_f = environment[environment["city_name"].isin(selected_cities)]
     pred_f = predictions[predictions["city_name"].isin(selected_cities)]
+    anom_f = anomalies[anomalies["city_name"].isin(selected_cities)] if not anomalies.empty else anomalies
 
-    tab_overview, tab_accidents, tab_environment, tab_predictions, tab_insights, tab_about = st.tabs(
-        ["Overview", "Accident Trends", "Environmental Trends", "Risk Predictions", "Model Insights", "Data & Methodology"]
+    tab_overview, tab_accidents, tab_environment, tab_predictions, tab_anomalies, tab_insights, tab_about = st.tabs(
+        ["Overview", "Accident Trends", "Environmental Trends", "Risk Predictions", "Anomalies", "Model Insights", "Data & Methodology"]
     )
 
     # ---------------- Overview ----------------
@@ -187,6 +194,46 @@ def main():
                     "the previous year's accident count -- accident history dominates once included. "
                     "See the Model Insights tab for the full ablation analysis."
                 )
+
+    # ---------------- Anomalies ----------------
+    with tab_anomalies:
+        st.subheader("Unusual environmental readings")
+        st.markdown(
+            "City-months where a metric deviated sharply from that city's own historical "
+            "pattern **for that calendar month** (|z| > 2.5 AND practically significant). "
+            "Anomalies flag *readings worth investigating* — some correspond to real events "
+            "(e.g. Pune's record 2019-20 unseasonal rains), others to sensor/data-quality "
+            "issues. One faulty rain gauge (TN004, Chennai) was found and excluded this way."
+        )
+        if anom_f.empty:
+            st.info("No anomalies detected for the selected cities (or detect_anomalies.py hasn't been run).")
+        else:
+            metric_options = sorted(anom_f["metric"].unique())
+            selected_metrics = st.multiselect("Metrics", metric_options, default=metric_options)
+            view = anom_f[anom_f["metric"].isin(selected_metrics)].copy()
+            view["period"] = view["year"].astype(int).astype(str) + "-" + view["month"].astype(int).astype(str).str.zfill(2)
+            view["z_score"] = view["z_score"].astype(float).round(2)
+            view["observed_value"] = view["observed_value"].astype(float).round(1)
+            view["historical_mean"] = view["historical_mean"].astype(float).round(1)
+
+            display = (
+                view[["city_name", "period", "metric", "observed_value", "historical_mean", "z_score", "direction"]]
+                .sort_values("z_score", key=abs, ascending=False)
+                .rename(columns={
+                    "city_name": "City", "period": "Month", "metric": "Metric",
+                    "observed_value": "Observed", "historical_mean": "Historical mean",
+                    "z_score": "Z-score", "direction": "Direction",
+                })
+            )
+            st.dataframe(display, use_container_width=True, hide_index=True)
+
+            fig_anom = px.scatter(
+                view, x="period", y="z_score", color="city_name", symbol="metric",
+                labels={"z_score": "Z-score", "period": "Month", "city_name": "City"},
+                hover_data=["metric", "observed_value", "historical_mean"],
+            )
+            fig_anom.update_xaxes(categoryorder="category ascending", tickangle=45)
+            st.plotly_chart(fig_anom, use_container_width=True, key="anomaly_scatter")
 
     # ---------------- Model Insights ----------------
     with tab_insights:
