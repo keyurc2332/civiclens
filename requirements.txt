@@ -30,3 +30,8 @@ plotly>=5.22
 pytest>=8.0
 black>=24.0
 ruff>=0.4
+
+# --- API ---
+fastapi>=0.111
+uvicorn[standard]>=0.30
+
