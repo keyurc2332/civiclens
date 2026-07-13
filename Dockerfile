@@ -16,6 +16,7 @@ COPY config/ config/
 COPY sql/ sql/
 COPY src/ src/
 COPY scripts/ scripts/
+COPY .streamlit/ .streamlit/
 
 # Default command is the API; the dashboard service overrides this
 # in docker-compose.yml.
