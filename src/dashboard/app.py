@@ -56,8 +56,8 @@ def main():
     env_f = environment[environment["city_name"].isin(selected_cities)]
     pred_f = predictions[predictions["city_name"].isin(selected_cities)]
 
-    tab_overview, tab_accidents, tab_environment, tab_predictions, tab_about = st.tabs(
-        ["Overview", "Accident Trends", "Environmental Trends", "Risk Predictions", "Data & Methodology"]
+    tab_overview, tab_accidents, tab_environment, tab_predictions, tab_insights, tab_about = st.tabs(
+        ["Overview", "Accident Trends", "Environmental Trends", "Risk Predictions", "Model Insights", "Data & Methodology"]
     )
 
     # ---------------- Overview ----------------
@@ -131,23 +131,107 @@ def main():
 
     # ---------------- Risk Predictions ----------------
     with tab_predictions:
-        st.subheader("Latest predicted risk level per city")
-        latest_preds = pred_f.sort_values("year").groupby("city_name").tail(1)
-        for _, row in latest_preds.iterrows():
-            badge = {"Low": "🟢", "Medium": "🟡", "High": "🔴"}.get(row["risk_level"], "")
-            with st.expander(f"{badge} {row['city_name']} — {row['risk_level']} risk ({row['confidence']:.0%} confidence)"):
-                st.write(f"Based on {int(row['year'])} state-level environmental averages, model `{row['model_version']}`.")
-                features = json.loads(row["top_features"]) if isinstance(row["top_features"], str) else row["top_features"]
-                feat_df = pd.DataFrame(features)
-                fig6 = px.bar(
-                    feat_df, x="mean_abs_shap", y="feature", orientation="h",
-                    labels={"mean_abs_shap": "Mean |SHAP value| (feature importance)", "feature": ""},
+        available_versions = sorted(pred_f["model_version"].unique(), reverse=True)
+        if not available_versions:
+            st.info("No predictions available yet -- run a training script first.")
+        else:
+            selected_version = st.selectbox(
+                "Model version",
+                available_versions,
+                help="enriched_v2: XGBoost with engineered features, per-prediction SHAP. "
+                     "baseline_v1: Random Forest, raw environmental features, global importance only.",
+            )
+            version_preds = pred_f[pred_f["model_version"] == selected_version]
+
+            st.subheader("Latest predicted risk level per city")
+            latest_preds = version_preds.sort_values("year").groupby("city_name").tail(1)
+            for _, row in latest_preds.iterrows():
+                badge = {"Low": "🟢", "Medium": "🟡", "High": "🔴"}.get(row["risk_level"], "")
+                with st.expander(f"{badge} {row['city_name']} — {row['risk_level']} risk ({row['confidence']:.0%} confidence)"):
+                    st.write(f"Based on {int(row['year'])} state-level data, model `{row['model_version']}`.")
+                    features = json.loads(row["top_features"]) if isinstance(row["top_features"], str) else row["top_features"]
+                    feat_df = pd.DataFrame(features)
+
+                    if "shap_value" in feat_df.columns:
+                        # v2: per-prediction SHAP -- signed values, colored by direction
+                        feat_df["direction"] = feat_df["shap_value"].apply(
+                            lambda v: "pushes toward this risk level" if v > 0 else "pushes away"
+                        )
+                        fig6 = px.bar(
+                            feat_df.sort_values("shap_value"),
+                            x="shap_value", y="feature", orientation="h", color="direction",
+                            color_discrete_map={
+                                "pushes toward this risk level": "#e45756",
+                                "pushes away": "#4c78a8",
+                            },
+                            labels={"shap_value": "SHAP value (this prediction)", "feature": ""},
+                        )
+                        st.plotly_chart(fig6, use_container_width=True, key=f"shap_{selected_version}_{row['city_name']}")
+                        st.caption(
+                            "Per-prediction SHAP: how each feature pushed THIS city's prediction "
+                            "toward or away from the predicted risk level."
+                        )
+                    else:
+                        # v1: global mean |SHAP| importance
+                        fig6 = px.bar(
+                            feat_df, x="mean_abs_shap", y="feature", orientation="h",
+                            labels={"mean_abs_shap": "Mean |SHAP value| (global importance)", "feature": ""},
+                        )
+                        st.plotly_chart(fig6, use_container_width=True, key=f"shap_{selected_version}_{row['city_name']}")
+                        st.caption("Global feature importance from training (same for all cities in v1).")
+
+            if selected_version == "enriched_v2":
+                st.warning(
+                    "Honest caveat: v2's confidences (93-96%) reflect overfitting to a small "
+                    "23-row training sample, not genuine certainty. Its top driver everywhere is "
+                    "the previous year's accident count -- accident history dominates once included. "
+                    "See the Model Insights tab for the full ablation analysis."
                 )
-                st.plotly_chart(fig6, use_container_width=True, key=f"shap_{row['city_name']}")
+
+    # ---------------- Model Insights ----------------
+    with tab_insights:
+        st.subheader("Ablation study: what actually predicts accident risk?")
+        st.markdown(
+            """
+            Three feature configurations were evaluated with identical cross-validation
+            across three model families. Sample sizes differ because engineered features
+            (lags, year-over-year deltas) consume each state's first year of data.
+            """
+        )
+        ablation = pd.DataFrame({
+            "Configuration": ["A: Baseline environment", "B: Enriched environment (no history)", "C: Full (env + accident history)"],
+            "Rows": [73, 40, 23],
+            "Features": [6, 9, 11],
+            "LogReg acc": [0.671, 0.600, 0.652],
+            "RF acc": [0.630, 0.725, 0.739],
+            "XGBoost acc": [0.603, 0.675, 0.783],
+        })
+        st.dataframe(ablation, use_container_width=True, hide_index=True)
+
+        st.markdown(
+            """
+            **Findings, honestly stated:**
+
+            1. **With simple features and the most data (A), logistic regression wins** —
+               classic small-data behavior: flexible models overfit, linear models generalize.
+            2. **Engineered environmental features (B) meaningfully help tree models**
+               (RF: 63% → 72.5%) even with fewer rows — the environmental signal
+               (pollution deltas, monsoon share) is real.
+            3. **Accident history dominates when included (C).** XGBoost hits 78%, but
+               per-prediction SHAP shows `prev_total_accidents` as the top driver for
+               every single city — much of that accuracy is "states with many accidents
+               last year have many this year." True, but nearly tautological.
+
+            **Bottom line:** environmental conditions carry genuine but *secondary*
+            predictive signal for state-year accident risk. Accident persistence is the
+            strongest single predictor. Confidences from the 23-row model (C) should be
+            treated as overfit, not as calibrated probabilities.
+            """
+        )
         st.caption(
-            "Feature importance shown is global (from cross-validated training), not "
-            "per-prediction SHAP values -- a reasonable Phase 1 simplification, notable "
-            "improvement for Phase 2 would be per-row SHAP explanations."
+            "Caveat: sample sizes differ across configurations, so accuracies are "
+            "directional evidence rather than a strictly controlled comparison. "
+            "Reproduce with: python scripts/run_ablation.py"
         )
 
     # ---------------- Data & Methodology ----------------
