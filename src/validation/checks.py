@@ -5,9 +5,9 @@ suite for a handful of sources. Pandera schemas + a small quality-scoring
 function cover schema drift, nulls, and dupes, and are easy to explain
 in an interview.
 """
+
 import pandas as pd
-import pandera as pa
-from pandera import Column, DataFrameSchema, Check
+from pandera import Check, Column, DataFrameSchema
 
 accident_schema = DataFrameSchema(
     {

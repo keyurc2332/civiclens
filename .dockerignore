@@ -1,0 +1,10 @@
+.venv/
+data_climate/
+models/
+.git/
+__pycache__/
+*.pyc
+.env
+notebooks/
+docs/
+tests/

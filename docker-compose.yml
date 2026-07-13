@@ -1,8 +1,26 @@
+# CivicLens full-stack demo: Postgres + REST API + dashboard, seeded
+# with a snapshot of the analytics layer so everything works with NO
+# raw data download.
+#
+#   docker compose up --build
+#
+# Then:
+#   Dashboard: http://localhost:8501
+#   API docs:  http://localhost:8000/docs
+#
+# The seed (seed/03_analytics_seed.sql) is a pg_dump snapshot of the
+# analytics schema -- small (~10K rows), regenerated via
+# scripts/export_seed.ps1 after pipeline runs. The full raw/clean
+# pipeline still works as documented in the README, but is NOT needed
+# just to explore the product.
+#
+# NOTE for local pipeline development: the original single-container
+# setup exposed Postgres on host port 5433; that mapping is preserved.
+
 services:
   postgres:
     image: postgres:16
     container_name: civiclens_pg
-    restart: unless-stopped
     environment:
       POSTGRES_USER: civiclens
       POSTGRES_PASSWORD: civiclens_dev
@@ -11,7 +29,38 @@ services:
       - "5433:5432"
     volumes:
       - civiclens_pgdata:/var/lib/postgresql/data
-      - ./sql:/docker-entrypoint-initdb.d   # auto-runs 01/02/03 .sql on first boot
+      - ./sql/01_raw_schema.sql:/docker-entrypoint-initdb.d/01_raw_schema.sql:ro
+      - ./sql/02_clean_schema.sql:/docker-entrypoint-initdb.d/02_clean_schema.sql:ro
+      - ./seed/03_analytics_seed.sql:/docker-entrypoint-initdb.d/03_analytics_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U civiclens -d civiclens"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    container_name: civiclens_api
+    environment:
+      DATABASE_URL: postgresql://civiclens:civiclens_dev@postgres:5432/civiclens
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  dashboard:
+    build: .
+    container_name: civiclens_dashboard
+    environment:
+      DATABASE_URL: postgresql://civiclens:civiclens_dev@postgres:5432/civiclens
+    ports:
+      - "8501:8501"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["streamlit", "run", "src/dashboard/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
 
 volumes:
   civiclens_pgdata:

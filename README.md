@@ -1,8 +1,42 @@
 # CivicLens
 
+[![CI](https://github.com/keyurc2332/civiclens/actions/workflows/ci.yml/badge.svg)](https://github.com/keyurc2332/civiclens/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.10-blue)
+![PostgreSQL](https://img.shields.io/badge/postgres-16-336791)
+![License](https://img.shields.io/badge/license-portfolio-lightgrey)
+
 **Road accident risk intelligence for major Indian cities — public data, honestly handled.**
 
+## ⚡ Try it in one command
+
+```bash
+git clone https://github.com/keyurc2332/civiclens.git
+cd civiclens
+docker compose up --build
+```
+
+Then open:
+- **Dashboard** → http://localhost:8501
+- **API docs** → http://localhost:8000/docs
+
+The stack (Postgres + FastAPI + Streamlit) comes pre-seeded with the analytics layer — no raw data download needed to explore the product. The full ingestion/training pipeline is documented below for reproducing everything from source.
+
+## 📊 By the numbers
+
+| | |
+|---|---|
+| **596K** | station-day environmental records processed |
+| **453** | CPCB monitoring stations ingested |
+| **37** | states in the training data |
+| **73** | state-year training rows (baseline model) |
+| **3 × 3** | models × feature sets in the ablation study |
+| **37** | environmental anomalies detected |
+| **1** | faulty rain gauge caught and excluded (TN004) |
+| **7** | dashboard tabs |
+
 A production-ready ML data pipeline and analytics system that ingests government accident and environmental data, cleans and validates it, trains interpretable risk classifiers, detects environmental anomalies, and exposes insights via REST API and interactive dashboard. Built as a portfolio project to demonstrate full-stack ML engineering: data sourcing, warehouse architecture, feature engineering, model rigor, explainability, and DevOps.
+
+> 🧠 **Why decisions were made:** see [docs/engineering_decisions.md](docs/engineering_decisions.md) — PostgreSQL vs SQLite, why XGBoost's "win" carries an asterisk, why TN004 was only partially excluded, and more.
 
 ---
 

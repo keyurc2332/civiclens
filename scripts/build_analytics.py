@@ -8,6 +8,7 @@ the dashboard's scope, not the model's.
 Run with:
     python scripts/build_analytics.py
 """
+
 import os
 import sys
 
@@ -32,14 +33,12 @@ def build_dim_city(engine, cities: list) -> dict:
     with engine.begin() as conn:
         for c in cities:
             conn.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO analytics.dim_city (city_name, state, latitude, longitude)
                     VALUES (:name, :state, :lat, :lon)
                     ON CONFLICT (city_name) DO UPDATE SET
                         state = EXCLUDED.state, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude
-                    """
-                ),
+                    """),
                 {"name": c["name"], "state": c["state"], "lat": c["lat"], "lon": c["lon"]},
             )
         result = conn.execute(text("SELECT city_id, city_name FROM analytics.dim_city"))
@@ -54,25 +53,36 @@ def build_dim_date(engine, years: range) -> dict:
     """
     rows = []
     for y in years:
-        rows.append({"date_id": y * 100, "year": y, "month": None, "quarter": None,
-                     "is_monsoon": None, "label": str(y)})
+        rows.append(
+            {
+                "date_id": y * 100,
+                "year": y,
+                "month": None,
+                "quarter": None,
+                "is_monsoon": None,
+                "label": str(y),
+            }
+        )
         for m in range(1, 13):
-            rows.append({
-                "date_id": y * 100 + m, "year": y, "month": m,
-                "quarter": (m - 1) // 3 + 1, "is_monsoon": m in (6, 7, 8, 9),
-                "label": f"{y}-{m:02d}",
-            })
+            rows.append(
+                {
+                    "date_id": y * 100 + m,
+                    "year": y,
+                    "month": m,
+                    "quarter": (m - 1) // 3 + 1,
+                    "is_monsoon": m in (6, 7, 8, 9),
+                    "label": f"{y}-{m:02d}",
+                }
+            )
 
     with engine.begin() as conn:
         for r in rows:
             conn.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO analytics.dim_date (date_id, year, month, quarter, is_monsoon, label)
                     VALUES (:date_id, :year, :month, :quarter, :is_monsoon, :label)
                     ON CONFLICT (date_id) DO NOTHING
-                    """
-                ),
+                    """),
                 r,
             )
         result = conn.execute(text("SELECT date_id, label FROM analytics.dim_date"))
@@ -87,8 +97,10 @@ def build_fact_accident(engine, city_ids: dict, date_ids: dict, cities: list) ->
         df = pd.read_sql(text("SELECT state, year, total_accidents FROM clean.accidents"), conn)
 
     with engine.begin() as conn:
-        conn.execute(text("DELETE FROM analytics.fact_accident_month WHERE city_id = ANY(:ids)"),
-                     {"ids": list(city_ids.values())})
+        conn.execute(
+            text("DELETE FROM analytics.fact_accident_month WHERE city_id = ANY(:ids)"),
+            {"ids": list(city_ids.values())},
+        )
         for c in cities:
             city_id = city_ids[c["name"]]
             state_rows = df[df["state"] == c["state"]]
@@ -97,24 +109,32 @@ def build_fact_accident(engine, city_ids: dict, date_ids: dict, cities: list) ->
                 if date_id is None:
                     continue
                 conn.execute(
-                    text(
-                        """
+                    text("""
                         INSERT INTO analytics.fact_accident_month
                             (city_id, date_id, grain, total_accidents, fatalities, injuries)
                         VALUES (:city_id, :date_id, 'state_year', :total, NULL, NULL)
-                        """
-                    ),
-                    {"city_id": city_id, "date_id": date_id,
-                     "total": None if pd.isna(row["total_accidents"]) else int(row["total_accidents"])},
+                        """),
+                    {
+                        "city_id": city_id,
+                        "date_id": date_id,
+                        "total": None if pd.isna(row["total_accidents"]) else int(row["total_accidents"]),
+                    },
                 )
     print("Loaded analytics.fact_accident_month")
 
 
 def build_fact_environment(engine, city_ids: dict, date_ids: dict) -> None:
     with engine.begin() as conn:
-        aq = pd.read_sql(text("SELECT city, observed_date, avg_pm25, avg_pm10 FROM clean.air_quality_daily"), conn)
-        wx = pd.read_sql(text("SELECT city, observed_date, avg_temp_c, rainfall_mm, avg_humidity, avg_wind_kmh "
-                               "FROM clean.weather_daily"), conn)
+        aq = pd.read_sql(
+            text("SELECT city, observed_date, avg_pm25, avg_pm10 FROM clean.air_quality_daily"), conn
+        )
+        wx = pd.read_sql(
+            text(
+                "SELECT city, observed_date, avg_temp_c, rainfall_mm, avg_humidity, avg_wind_kmh "
+                "FROM clean.weather_daily"
+            ),
+            conn,
+        )
 
     merged = pd.merge(aq, wx, on=["city", "observed_date"], how="outer")
     merged["observed_date"] = pd.to_datetime(merged["observed_date"])
@@ -123,15 +143,22 @@ def build_fact_environment(engine, city_ids: dict, date_ids: dict) -> None:
 
     monthly = (
         merged.groupby(["city", "year", "month"])
-        .agg(avg_pm25=("avg_pm25", "mean"), avg_pm10=("avg_pm10", "mean"),
-             total_rainfall_mm=("rainfall_mm", "sum"), avg_temp_c=("avg_temp_c", "mean"),
-             avg_humidity=("avg_humidity", "mean"), avg_wind_kmh=("avg_wind_kmh", "mean"))
+        .agg(
+            avg_pm25=("avg_pm25", "mean"),
+            avg_pm10=("avg_pm10", "mean"),
+            total_rainfall_mm=("rainfall_mm", "sum"),
+            avg_temp_c=("avg_temp_c", "mean"),
+            avg_humidity=("avg_humidity", "mean"),
+            avg_wind_kmh=("avg_wind_kmh", "mean"),
+        )
         .reset_index()
     )
 
     with engine.begin() as conn:
-        conn.execute(text("DELETE FROM analytics.fact_environment_month WHERE city_id = ANY(:ids)"),
-                     {"ids": list(city_ids.values())})
+        conn.execute(
+            text("DELETE FROM analytics.fact_environment_month WHERE city_id = ANY(:ids)"),
+            {"ids": list(city_ids.values())},
+        )
         for _, row in monthly.iterrows():
             city_id = city_ids.get(row["city"])
             if city_id is None:
@@ -140,15 +167,14 @@ def build_fact_environment(engine, city_ids: dict, date_ids: dict) -> None:
             if date_id is None:
                 continue
             conn.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO analytics.fact_environment_month
                         (city_id, date_id, avg_pm25, avg_pm10, total_rainfall_mm, avg_temp_c, avg_humidity, avg_wind_kmh)
                     VALUES (:city_id, :date_id, :pm25, :pm10, :rain, :temp, :hum, :wind)
-                    """
-                ),
+                    """),
                 {
-                    "city_id": city_id, "date_id": date_id,
+                    "city_id": city_id,
+                    "date_id": date_id,
                     "pm25": None if pd.isna(row["avg_pm25"]) else float(row["avg_pm25"]),
                     "pm10": None if pd.isna(row["avg_pm10"]) else float(row["avg_pm10"]),
                     "rain": None if pd.isna(row["total_rainfall_mm"]) else float(row["total_rainfall_mm"]),

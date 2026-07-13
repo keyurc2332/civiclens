@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.validation.checks import quality_score, flag_duplicates
+from src.validation.checks import flag_duplicates, quality_score
 
 
 def test_quality_score_all_present():

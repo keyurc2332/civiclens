@@ -3,6 +3,7 @@ timeouts, and structured logging. Source-specific clients (data.gov.in,
 CPCB, IMD) subclass or wrap this rather than each rolling their own
 requests logic.
 """
+
 import logging
 import time
 import uuid
@@ -30,7 +31,7 @@ class BaseAPIClient:
         identified/replayed without guessing."""
         return uuid.uuid4()
 
-# data.gov.in (and some other Indian gov APIs) return 502 for
+    # data.gov.in (and some other Indian gov APIs) return 502 for
     # Python's default "python-requests/x.x" user-agent but accept
     # browser-like ones. Set a default here so every source client
     # gets this for free instead of rediscovering it independently.

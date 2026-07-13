@@ -16,14 +16,15 @@ Design notes:
 - Model version is a query parameter (?model_version=enriched_v2)
   because both v1 and v2 predictions coexist in fact_risk_prediction.
 """
+
 import json
+import os
+import sys
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from sqlalchemy import text
 
-import os
-import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.warehouse.db import get_engine
@@ -178,15 +179,13 @@ def city_prediction(
 @app.get("/models")
 def list_models():
     """Available model versions and how many predictions each has."""
-    df = _df(
-        """
+    df = _df("""
         SELECT model_version, COUNT(*) AS n_predictions,
                MIN(predicted_at) AS first_predicted, MAX(predicted_at) AS last_predicted
         FROM analytics.fact_risk_prediction
         GROUP BY model_version
         ORDER BY model_version
-        """
-    )
+        """)
     records = df.to_dict(orient="records")
     for r in records:
         r["first_predicted"] = str(r["first_predicted"])

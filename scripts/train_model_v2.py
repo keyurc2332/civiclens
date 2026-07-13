@@ -16,6 +16,7 @@ Key differences from Phase 1 (train_baseline_model.py):
 - Rows with missing lag features (each state's first year, 2021) are
   dropped -- documented sample-size cost of using lag features.
 """
+
 import json
 import os
 import sys
@@ -61,16 +62,21 @@ def train_and_evaluate(X: pd.DataFrame, y: pd.Series) -> dict:
     cv = StratifiedKFold(n_splits=max(2, n_splits), shuffle=True, random_state=42)
 
     models = {
-        "logistic_regression": Pipeline([
-            ("scale", StandardScaler()),
-            ("clf", LogisticRegression(max_iter=1000)),
-        ]),
+        "logistic_regression": Pipeline(
+            [
+                ("scale", StandardScaler()),
+                ("clf", LogisticRegression(max_iter=1000)),
+            ]
+        ),
         "random_forest": RandomForestClassifier(
             n_estimators=200, max_depth=4, min_samples_leaf=2, random_state=42
         ),
         "xgboost": XGBClassifier(
-            n_estimators=200, max_depth=3, learning_rate=0.1,
-            eval_metric="mlogloss", random_state=42,
+            n_estimators=200,
+            max_depth=3,
+            learning_rate=0.1,
+            eval_metric="mlogloss",
+            random_state=42,
         ),
     }
 
@@ -130,11 +136,17 @@ def compute_per_prediction_shap(model, X_row: pd.DataFrame, pred_class_idx: int)
 
 def save_predictions_for_dashboard(engine, model, training: pd.DataFrame, config: dict) -> None:
     with engine.begin() as conn:
-        city_ids = {r.city_name: r.city_id for r in conn.execute(text("SELECT city_id, city_name FROM analytics.dim_city"))}
-        date_ids = {r.label: r.date_id for r in conn.execute(text("SELECT date_id, label FROM analytics.dim_date"))}
+        city_ids = {
+            r.city_name: r.city_id
+            for r in conn.execute(text("SELECT city_id, city_name FROM analytics.dim_city"))
+        }
+        date_ids = {
+            r.label: r.date_id for r in conn.execute(text("SELECT date_id, label FROM analytics.dim_date"))
+        }
         # Clear previous predictions from this model version for idempotent re-runs
-        conn.execute(text("DELETE FROM analytics.fact_risk_prediction WHERE model_version = :v"),
-                     {"v": MODEL_VERSION})
+        conn.execute(
+            text("DELETE FROM analytics.fact_risk_prediction WHERE model_version = :v"), {"v": MODEL_VERSION}
+        )
 
     for c in config["cities"]:
         state_rows = training[training["state"] == c["state"]].dropna(subset=MODEL_FEATURES)
@@ -158,16 +170,17 @@ def save_predictions_for_dashboard(engine, model, training: pd.DataFrame, config
 
         with engine.begin() as conn:
             conn.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO analytics.fact_risk_prediction
                         (city_id, date_id, model_version, risk_level, confidence, top_features)
                     VALUES (:city_id, :date_id, :model_version, :risk_level, :confidence, :top_features)
-                    """
-                ),
+                    """),
                 {
-                    "city_id": city_id, "date_id": date_id, "model_version": MODEL_VERSION,
-                    "risk_level": risk_level, "confidence": confidence,
+                    "city_id": city_id,
+                    "date_id": date_id,
+                    "model_version": MODEL_VERSION,
+                    "risk_level": risk_level,
+                    "confidence": confidence,
                     "top_features": json.dumps(top_features),
                 },
             )
@@ -186,8 +199,10 @@ def main():
 
     usable = labeled.dropna(subset=MODEL_FEATURES + ["risk_level"])
     dropped = len(labeled) - len(usable)
-    print(f"Training rows: {len(usable)} (dropped {dropped} rows with missing lag/features "
-          f"-- mostly each state's first year, a documented cost of lag features)")
+    print(
+        f"Training rows: {len(usable)} (dropped {dropped} rows with missing lag/features "
+        f"-- mostly each state's first year, a documented cost of lag features)"
+    )
     print("\nRisk label distribution:")
     print(usable["risk_level"].value_counts())
 
@@ -199,8 +214,11 @@ def main():
     print("\nFitting final XGBoost on full data for dashboard predictions...")
     label_map = {label: i for i, label in enumerate(LABEL_ORDER)}
     final_model = XGBClassifier(
-        n_estimators=200, max_depth=3, learning_rate=0.1,
-        eval_metric="mlogloss", random_state=42,
+        n_estimators=200,
+        max_depth=3,
+        learning_rate=0.1,
+        eval_metric="mlogloss",
+        random_state=42,
     )
     final_model.fit(X, y.map(label_map))
 

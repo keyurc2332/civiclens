@@ -19,6 +19,7 @@ accident persistence?).
 Run with:
     python scripts/run_ablation.py
 """
+
 import os
 import sys
 
@@ -63,8 +64,9 @@ def evaluate_config(df: pd.DataFrame, features: list) -> dict:
     models = {
         "logreg": Pipeline([("scale", StandardScaler()), ("clf", LogisticRegression(max_iter=1000))]),
         "rf": RandomForestClassifier(n_estimators=200, max_depth=4, min_samples_leaf=2, random_state=42),
-        "xgb": XGBClassifier(n_estimators=200, max_depth=3, learning_rate=0.1,
-                             eval_metric="mlogloss", random_state=42),
+        "xgb": XGBClassifier(
+            n_estimators=200, max_depth=3, learning_rate=0.1, eval_metric="mlogloss", random_state=42
+        ),
     }
 
     row = {"n_rows": len(usable), "n_features": len(features)}

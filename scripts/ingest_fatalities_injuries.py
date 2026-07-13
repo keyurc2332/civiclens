@@ -7,6 +7,7 @@ injuries columns.
 Run with:
     python scripts/ingest_fatalities_injuries.py
 """
+
 import os
 import sys
 
@@ -88,17 +89,15 @@ def main():
             injuries = None if pd.isna(row["injuries"]) else int(row["injuries"])
 
             conn.execute(
-                text(
-                    """
+                text("""
                     UPDATE clean.accidents
                     SET fatalities = :fatalities, injuries = :injuries, loaded_at = now()
                     WHERE state = :state AND year = :year AND month IS NULL
-                    """
-                ),
+                    """),
                 {"state": state, "year": year, "fatalities": fatalities, "injuries": injuries},
             )
 
-    print(f"Updated clean.accidents with fatalities and injuries")
+    print("Updated clean.accidents with fatalities and injuries")
     print("Done.")
 
 

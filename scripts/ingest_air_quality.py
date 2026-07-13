@@ -28,7 +28,7 @@ IMPORTANT design decisions, documented here deliberately:
 Run with:
     python scripts/ingest_air_quality.py
 """
-import glob
+
 import json
 import os
 import sys
@@ -87,8 +87,10 @@ def load_target_stations(target_cities: set) -> pd.DataFrame:
     stations = pd.read_csv(STATIONS_INFO_PATH)
     stations["city"] = stations["city"].str.strip()
     stations["state"] = stations["state"].str.strip()
-    print(f"Processing all {len(stations)} stations nationwide "
-          f"(dashboard will scope to: {sorted(target_cities)})")
+    print(
+        f"Processing all {len(stations)} stations nationwide "
+        f"(dashboard will scope to: {sorted(target_cities)})"
+    )
     return stations
 
 
@@ -157,12 +159,10 @@ def land_raw(engine, df: pd.DataFrame, table: str, cols: dict) -> None:
     station_val = ", :station_id" if table == "air_quality" else ""
     with engine.begin() as conn:
         conn.execute(
-            text(
-                f"""
+            text(f"""
                 INSERT INTO raw.{table} (source, city{station_col}, {date_col}, payload, ingested_at, ingestion_batch_id)
                 VALUES (:source, :city{station_val}, :{date_col}, :payload, now(), gen_random_uuid())
-                """
-            ),
+                """),
             records,
         )
 
@@ -203,7 +203,9 @@ def build_clean_weather(station_daily: pd.DataFrame) -> pd.DataFrame:
     return grouped
 
 
-def load_clean(engine, df: pd.DataFrame, table: str, value_cols: list, include_n_readings: bool = False) -> None:
+def load_clean(
+    engine, df: pd.DataFrame, table: str, value_cols: list, include_n_readings: bool = False
+) -> None:
     cities = tuple(df["city"].unique())
     with engine.begin() as conn:
         # Idempotent re-runs: clear existing rows for these cities first.
@@ -231,14 +233,12 @@ def load_clean(engine, df: pd.DataFrame, table: str, value_cols: list, include_n
     # 100k+ rows, and row-by-row execute would be impractically slow.
     with engine.begin() as conn:
         conn.execute(
-            text(
-                f"""
+            text(f"""
                 INSERT INTO clean.{table}
                     (city, observed_date, {col_list}, quality_score, quality_flags{extra_col}, loaded_at)
                 VALUES
                     (:city, :observed_date, {placeholders}, :quality_score, :quality_flags{extra_val}, now())
-                """
-            ),
+                """),
             records,
         )
     print(f"Loaded {len(df)} rows into clean.{table}")

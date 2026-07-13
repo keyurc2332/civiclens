@@ -20,6 +20,7 @@ Used by train_model_v2.py. Kept as an importable module (src/features)
 rather than a script, since both training and any future prediction
 service need identical feature logic.
 """
+
 import os
 import sys
 
@@ -31,18 +32,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from src.warehouse.db import get_engine
 
-STATIONS_INFO_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "..", "data_climate", "stations_info.csv"
-)
+STATIONS_INFO_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data_climate", "stations_info.csv")
 
 BASE_FEATURES = ["avg_pm25", "avg_pm10", "avg_temp_c", "total_rainfall_mm", "avg_humidity", "avg_wind_kmh"]
 ENGINEERED_FEATURES = [
-    "fatality_rate",        # fatalities / total_accidents (same year -- see note below)
-    "prev_total_accidents", # lag-1 accident count
-    "prev_fatality_rate",   # lag-1 fatality rate
-    "pm25_yoy_change",      # PM2.5 delta vs previous year
-    "temp_yoy_change",      # temperature delta vs previous year
-    "monsoon_rain_share",   # Jun-Sep rainfall / annual rainfall
+    "fatality_rate",  # fatalities / total_accidents (same year -- see note below)
+    "prev_total_accidents",  # lag-1 accident count
+    "prev_fatality_rate",  # lag-1 fatality rate
+    "pm25_yoy_change",  # PM2.5 delta vs previous year
+    "temp_yoy_change",  # temperature delta vs previous year
+    "monsoon_rain_share",  # Jun-Sep rainfall / annual rainfall
 ]
 
 # NOTE on leakage: fatality_rate for the SAME year as the target would be
@@ -84,12 +83,19 @@ def build_enriched_training_table(engine=None) -> pd.DataFrame:
     city_state = build_city_state_map()
 
     with engine.begin() as conn:
-        aq = pd.read_sql(text("SELECT city, observed_date, avg_pm25, avg_pm10 FROM clean.air_quality_daily"), conn)
+        aq = pd.read_sql(
+            text("SELECT city, observed_date, avg_pm25, avg_pm10 FROM clean.air_quality_daily"), conn
+        )
         wx = pd.read_sql(
-            text("SELECT city, observed_date, avg_temp_c, rainfall_mm, avg_humidity, avg_wind_kmh "
-                 "FROM clean.weather_daily"), conn)
+            text(
+                "SELECT city, observed_date, avg_temp_c, rainfall_mm, avg_humidity, avg_wind_kmh "
+                "FROM clean.weather_daily"
+            ),
+            conn,
+        )
         accidents = pd.read_sql(
-            text("SELECT state, year, total_accidents, fatalities, injuries FROM clean.accidents"), conn)
+            text("SELECT state, year, total_accidents, fatalities, injuries FROM clean.accidents"), conn
+        )
 
     env = pd.merge(aq, wx, on=["city", "observed_date"], how="outer")
     env = pd.merge(env, city_state, on="city", how="left")

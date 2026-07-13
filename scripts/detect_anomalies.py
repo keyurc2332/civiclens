@@ -19,10 +19,10 @@ missing) and surfaced in the dashboard.
 Run with:
     python scripts/detect_anomalies.py
 """
+
 import os
 import sys
 
-import numpy as np
 import pandas as pd
 from sqlalchemy import text
 
@@ -43,12 +43,12 @@ METRICS = ["avg_pm25", "avg_pm10", "avg_temp_c", "total_rainfall_mm", "avg_humid
 # meaningless. These floors keep only anomalies a human would agree are
 # anomalies.
 MIN_ABS_DEVIATION = {
-    "avg_pm25": 15.0,          # ug/m3
-    "avg_pm10": 25.0,          # ug/m3
-    "avg_temp_c": 2.0,         # degrees C
-    "total_rainfall_mm": 10.0, # mm over the month
-    "avg_humidity": 10.0,      # percentage points
-    "avg_wind_kmh": 3.0,       # km/h
+    "avg_pm25": 15.0,  # ug/m3
+    "avg_pm10": 25.0,  # ug/m3
+    "avg_temp_c": 2.0,  # degrees C
+    "total_rainfall_mm": 10.0,  # mm over the month
+    "avg_humidity": 10.0,  # percentage points
+    "avg_wind_kmh": 3.0,  # km/h
 }
 
 DDL = """
@@ -76,8 +76,7 @@ def main():
 
     with engine.begin() as conn:
         df = pd.read_sql(
-            text(
-                """
+            text("""
                 SELECT fe.city_id, dc.city_name, dd.date_id, dd.year, dd.month,
                        fe.avg_pm25, fe.avg_pm10, fe.avg_temp_c,
                        fe.total_rainfall_mm, fe.avg_humidity, fe.avg_wind_kmh
@@ -85,8 +84,7 @@ def main():
                 JOIN analytics.dim_city dc ON dc.city_id = fe.city_id
                 JOIN analytics.dim_date dd ON dd.date_id = fe.date_id
                 WHERE dd.month IS NOT NULL
-                """
-            ),
+                """),
             conn,
         )
 
@@ -105,22 +103,26 @@ def main():
                 z = (row[metric] - mean) / std
                 abs_dev = abs(row[metric] - mean)
                 if abs(z) > Z_THRESHOLD and abs_dev >= MIN_ABS_DEVIATION[metric]:
-                    anomalies.append({
-                        "city_id": int(city_id),
-                        "city_name": city_name,
-                        "date_id": int(row["date_id"]),
-                        "year": int(row["year"]),
-                        "month": int(month),
-                        "metric": metric,
-                        "observed_value": float(row[metric]),
-                        "historical_mean": float(mean),
-                        "historical_std": float(std),
-                        "z_score": float(z),
-                        "direction": "above" if z > 0 else "below",
-                    })
+                    anomalies.append(
+                        {
+                            "city_id": int(city_id),
+                            "city_name": city_name,
+                            "date_id": int(row["date_id"]),
+                            "year": int(row["year"]),
+                            "month": int(month),
+                            "metric": metric,
+                            "observed_value": float(row[metric]),
+                            "historical_mean": float(mean),
+                            "historical_std": float(std),
+                            "z_score": float(z),
+                            "direction": "above" if z > 0 else "below",
+                        }
+                    )
 
-    print(f"Detected {len(anomalies)} anomalies (|z| > {Z_THRESHOLD}, "
-          f"min {MIN_HISTORY} years of history per city-month)")
+    print(
+        f"Detected {len(anomalies)} anomalies (|z| > {Z_THRESHOLD}, "
+        f"min {MIN_HISTORY} years of history per city-month)"
+    )
 
     if not anomalies:
         print("Nothing to write.")
@@ -129,16 +131,14 @@ def main():
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM analytics.anomalies"))
         conn.execute(
-            text(
-                """
+            text("""
                 INSERT INTO analytics.anomalies
                     (city_id, date_id, metric, observed_value, historical_mean,
                      historical_std, z_score, direction)
                 VALUES
                     (:city_id, :date_id, :metric, :observed_value, :historical_mean,
                      :historical_std, :z_score, :direction)
-                """
-            ),
+                """),
             [{k: v for k, v in a.items() if k not in ("city_name", "year", "month")} for a in anomalies],
         )
 
@@ -146,9 +146,11 @@ def main():
     top = sorted(anomalies, key=lambda a: -abs(a["z_score"]))[:10]
     print("\nTop 10 most extreme anomalies:")
     for a in top:
-        print(f"  {a['city_name']} {a['year']}-{a['month']:02d}: {a['metric']} = "
-              f"{a['observed_value']:.1f} (historical mean {a['historical_mean']:.1f}, "
-              f"z = {a['z_score']:+.1f}, {a['direction']})")
+        print(
+            f"  {a['city_name']} {a['year']}-{a['month']:02d}: {a['metric']} = "
+            f"{a['observed_value']:.1f} (historical mean {a['historical_mean']:.1f}, "
+            f"z = {a['z_score']:+.1f}, {a['direction']})"
+        )
 
     print("\nDone. Anomalies written to analytics.anomalies.")
 

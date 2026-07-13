@@ -2,6 +2,7 @@
 Everything else (ingestion, validation, features) imports from here
 rather than building its own connection string.
 """
+
 import os
 from functools import lru_cache
 
@@ -16,9 +17,7 @@ load_dotenv()
 def get_engine() -> Engine:
     url = os.environ.get("DATABASE_URL")
     if not url:
-        raise RuntimeError(
-            "DATABASE_URL not set. Copy .env.example to .env and fill it in."
-        )
+        raise RuntimeError("DATABASE_URL not set. Copy .env.example to .env and fill it in.")
     return create_engine(url, pool_pre_ping=True)
 
 

@@ -20,6 +20,7 @@ This resource only has *total accident counts*, not fatalities/
 injuries -- those live in separate sibling resources on data.gov.in
 and are a fast-follow, not a Phase-1 blocker.
 """
+
 import json
 import os
 import sys
@@ -57,14 +58,12 @@ def land_raw(engine, records: list[dict], resource_id: str, batch_id: uuid.UUID)
     with engine.begin() as conn:
         for rec in records:
             conn.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO raw.accidents
                         (source, resource_id, state, year, month, payload, ingested_at, ingestion_batch_id)
                     VALUES
                         (:source, :resource_id, :state, NULL, NULL, :payload, now(), :batch_id)
-                    """
-                ),
+                    """),
                 {
                     "source": "data.gov.in",
                     "resource_id": resource_id,
@@ -111,26 +110,26 @@ def load_clean(engine, df: pd.DataFrame) -> None:
 
     records = []
     for _, row in df.iterrows():
-        records.append({
-            "state": row["state"],
-            "year": int(row["year"]),
-            "total_accidents": None if pd.isna(row["total_accidents"]) else int(row["total_accidents"]),
-            "quality_score": row["quality_score"],
-            "quality_flags": row["quality_flags"],
-        })
+        records.append(
+            {
+                "state": row["state"],
+                "year": int(row["year"]),
+                "total_accidents": None if pd.isna(row["total_accidents"]) else int(row["total_accidents"]),
+                "quality_score": row["quality_score"],
+                "quality_flags": row["quality_flags"],
+            }
+        )
 
     with engine.begin() as conn:
         conn.execute(
-            text(
-                """
+            text("""
                 INSERT INTO clean.accidents
                     (state, year, month, total_accidents, fatalities, injuries,
                      quality_score, quality_flags, loaded_at)
                 VALUES
                     (:state, :year, NULL, :total_accidents, NULL, NULL,
                      :quality_score, :quality_flags, now())
-                """
-            ),
+                """),
             records,
         )
     print(f"Loaded {len(records)} rows into clean.accidents")
@@ -160,8 +159,10 @@ def main():
     # Drop the known "All India" aggregate row if present -- it's a total,
     # not a state, and would distort state-level modeling if included.
     long_df = long_df[~long_df["state"].str.contains("All India", case=False, na=False)]
-    print(f"Loading all {long_df['state'].nunique()} states into clean.accidents "
-          f"({len(long_df)} state-year rows)")
+    print(
+        f"Loading all {long_df['state'].nunique()} states into clean.accidents "
+        f"({len(long_df)} state-year rows)"
+    )
 
     scored_df = compute_quality_score(long_df)
     load_clean(engine, scored_df)

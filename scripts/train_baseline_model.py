@@ -16,6 +16,7 @@ out of scope for Phase 1, noted as a Phase 2 improvement.
 Run with:
     python scripts/train_baseline_model.py
 """
+
 import json
 import os
 import sys
@@ -59,10 +60,16 @@ def build_training_table(engine) -> pd.DataFrame:
     city_state = build_city_state_map()
 
     with engine.begin() as conn:
-        aq = pd.read_sql(text("SELECT city, observed_date, avg_pm25, avg_pm10 FROM clean.air_quality_daily"), conn)
+        aq = pd.read_sql(
+            text("SELECT city, observed_date, avg_pm25, avg_pm10 FROM clean.air_quality_daily"), conn
+        )
         wx = pd.read_sql(
-            text("SELECT city, observed_date, avg_temp_c, rainfall_mm, avg_humidity, avg_wind_kmh "
-                 "FROM clean.weather_daily"), conn)
+            text(
+                "SELECT city, observed_date, avg_temp_c, rainfall_mm, avg_humidity, avg_wind_kmh "
+                "FROM clean.weather_daily"
+            ),
+            conn,
+        )
         accidents = pd.read_sql(text("SELECT state, year, total_accidents FROM clean.accidents"), conn)
 
     env = pd.merge(aq, wx, on=["city", "observed_date"], how="outer")
@@ -104,10 +111,12 @@ def train_and_evaluate(X: pd.DataFrame, y: pd.Series) -> dict:
     cv = StratifiedKFold(n_splits=max(2, n_splits), shuffle=True, random_state=42)
 
     models = {
-        "logistic_regression": Pipeline([
-            ("scale", StandardScaler()),
-            ("clf", LogisticRegression(max_iter=1000)),
-        ]),
+        "logistic_regression": Pipeline(
+            [
+                ("scale", StandardScaler()),
+                ("clf", LogisticRegression(max_iter=1000)),
+            ]
+        ),
         "random_forest": RandomForestClassifier(
             n_estimators=200, max_depth=4, min_samples_leaf=2, random_state=42
         ),
@@ -153,8 +162,13 @@ def save_predictions_for_dashboard(engine, model, feature_importance: list, conf
     """Score the 6 dashboard cities' latest available state-year data
     and write results into analytics.fact_risk_prediction."""
     with engine.begin() as conn:
-        city_ids = {r.city_name: r.city_id for r in conn.execute(text("SELECT city_id, city_name FROM analytics.dim_city"))}
-        date_ids = {r.label: r.date_id for r in conn.execute(text("SELECT date_id, label FROM analytics.dim_date"))}
+        city_ids = {
+            r.city_name: r.city_id
+            for r in conn.execute(text("SELECT city_id, city_name FROM analytics.dim_city"))
+        }
+        date_ids = {
+            r.label: r.date_id for r in conn.execute(text("SELECT date_id, label FROM analytics.dim_date"))
+        }
 
     training = build_training_table(engine)
     for c in config["cities"]:
@@ -176,16 +190,17 @@ def save_predictions_for_dashboard(engine, model, feature_importance: list, conf
 
         with engine.begin() as conn:
             conn.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO analytics.fact_risk_prediction
                         (city_id, date_id, model_version, risk_level, confidence, top_features)
                     VALUES (:city_id, :date_id, :model_version, :risk_level, :confidence, :top_features)
-                    """
-                ),
+                    """),
                 {
-                    "city_id": city_id, "date_id": date_id, "model_version": MODEL_VERSION,
-                    "risk_level": risk_level, "confidence": confidence,
+                    "city_id": city_id,
+                    "date_id": date_id,
+                    "model_version": MODEL_VERSION,
+                    "risk_level": risk_level,
+                    "confidence": confidence,
                     "top_features": json.dumps(feature_importance),
                 },
             )
