@@ -222,7 +222,7 @@ def main():
     X = labeled[FEATURE_COLS]
     y = labeled["risk_level"]
 
-    results = train_and_evaluate(X, y)
+    train_and_evaluate(X, y)
 
     print("\nFitting final Random Forest on full data for explainability + dashboard predictions...")
     final_model = RandomForestClassifier(n_estimators=200, max_depth=4, min_samples_leaf=2, random_state=42)
