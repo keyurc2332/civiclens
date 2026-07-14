@@ -53,7 +53,7 @@ def _df(query: str, params: dict | None = None) -> pd.DataFrame:
         return pd.read_sql(text(query), conn, params=params)
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     """Liveness check, verifies DB connectivity."""
     try:
